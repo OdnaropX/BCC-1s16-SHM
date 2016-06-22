@@ -15,6 +15,8 @@
 	#include <math.h>
 	#include <string.h>
 	
+	#include "arduino-serial-lib.h"
+	
 	#ifdef _WIN32 //Load lib for windows or mac.
 		#include <windows.h>
 		#include <Lmcons.h>
@@ -59,6 +61,11 @@ void main_quit();
 
 typedef enum _game_status{PLAYER_TYPPING, PLAYER_FINISH, NEXT_PLAYER, WAITING} STATUS;
 
+//Arduino
+int baudrate = 9600;  // default
+const char *serial_port = "COM1";
+int fd;
+
 int main(int argc, char * argv[]) {
 	int sequencia_player[2][1000], i;
 	int seq_pos = 0, reset_timer = 0, timer_count = 0, player_finished = 0;
@@ -67,6 +74,11 @@ int main(int argc, char * argv[]) {
 	//Game status
     STATUS game_status = NEXT_PLAYER;
 	int player = 0, begin_sequencia_player = 0;
+	
+	//Arduino
+	const int buf_max = 256;
+	char serialport[buf_max];
+	int rc;
 	
     //Main init
     if(!main_init()){
@@ -174,11 +186,21 @@ int main(int argc, char * argv[]) {
 					if(equal){
 						printf("(Servo) 0 (Move ambos)\n");
 						printf("Draw\n");
+						
+						//Arduino
+						rc = serialport_writebyte(fd, (uint8_t) 0);
+						if(rc==-1)
+							error("error writing");
 					}
 					else {
-						printf("(Servo) %d (contrai folha do jogador %d)\n", (begin_sequencia_player + 1) % 2 , (begin_sequencia_player + 1) % 2);
+						printf("(Servo) %d (contrai folha do jogador %d)\n", ((begin_sequencia_player + 1) % 2) +1, ((begin_sequencia_player + 1) % 2) +1);
 						printf("Winner %d\n", begin_sequencia_player + 1);
 						score[begin_sequencia_player] += 1;
+						
+						//Arduino
+						rc = serialport_writebyte(fd, (uint8_t) ((begin_sequencia_player + 1) % 2));
+						if(rc==-1)
+							error("error writing");
 					}
 					printf("Pontuação:\nJogador 1: %d\nJogador 2: %d\n", score[0], score[1]);
 					
@@ -195,6 +217,11 @@ int main(int argc, char * argv[]) {
 				//Send message to arduino of player and LED
 				printf("Player %d: Begin LED\n", player + 1);
 				game_status = WAITING;
+				
+				//Arduino
+				rc = serialport_writebyte(fd, (uint8_t) player);
+				if(rc==-1)
+					error("error writing");
 				break;
 			case WAITING:
 				//Do nothing.
@@ -238,6 +265,9 @@ bool main_init(){
         return false;
     }
     
+	fd = serialport_init(serial_port, baudrate);
+	if( fd==-1 ) return false;
+	
     //Create window
     main_Window = SDL_CreateWindow("Grade Defender", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, SDL_WINDOW_SHOWN);
     if(!main_Window){
